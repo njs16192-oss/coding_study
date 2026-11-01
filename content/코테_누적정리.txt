@@ -1,0 +1,470 @@
+// ============================================================
+//  자바 코딩테스트 필수 메소드 정리
+//  (프로그래머스는 Solution 클래스 안에 메소드만 채우는 방식이라
+//   필요한 import 는 직접 써야 함 -> import java.util.*;)
+// ============================================================
+
+
+// ============================================================
+// 1. 문자열 (String / StringBuilder)
+// ============================================================
+
+s.length()                  // 문자열 길이
+s.charAt(i)                 // i번째 문자 (소괄호! s[i] 는 에러)
+s.substring(a, b)           // [a, b) 부분 문자열 (b 미포함)
+s.indexOf("ab")             // "ab" 가 처음 나오는 위치 (없으면 -1)
+s.contains("ab")            // 포함 여부 (true / false)
+s.split(" ")                // 공백 기준으로 잘라서 String[] 반환
+s.toCharArray()             // 문자열 -> char 배열
+s.toUpperCase()             // 전부 대문자로
+s.toLowerCase()             // 전부 소문자로
+s.trim()                    // 앞뒤 공백 제거
+s.equals(t)                 // 내용 비교 (== 쓰면 안 됨! == 는 주소 비교)
+s.replace("a", "b")         // "a" 를 전부 "b" 로 바꿈 (""로 바꾸면 삭제)
+String.valueOf(x)           // 숫자 / char -> 문자열
+String.join(",", list)      // 리스트 원소를 "," 로 이어붙임
+
+// 문자열을 += 로 반복해서 붙이면 느려서, 반복문 안에서는 StringBuilder 사용
+StringBuilder sb = new StringBuilder();
+sb.append(x);               // 뒤에 붙이기
+sb.reverse();               // 뒤집기
+sb.toString();              // String 으로 변환
+sb.insert(0, x);            // 0번 위치에 끼워 넣기
+sb.deleteCharAt(i);         // i번째 글자 삭제
+sb.delete(start, end);      // [start, end) 삭제. end 는 미포함 -> 두 글자 지우려면 (i, i+2)
+sb.setLength(0);            // 비우기 (초기화)
+
+
+// ============================================================
+// 2. 형변환 / 숫자
+// ============================================================
+
+Integer.parseInt("123")         // 문자열 -> int
+Integer.valueOf("123")          // 문자열 -> Integer 객체
+Long.parseLong("123")           // 문자열 -> long (int 범위를 넘을 때)
+Integer.toBinaryString(n)       // 10진수 -> 2진수 문자열
+Integer.toString(n, 3)          // 10진수 -> n진수 문자열 (여기선 3진수)
+Integer.parseInt("101", 2)      // n진수 문자열 -> 10진수 (방향 헷갈리지 말기!)
+Integer.bitCount(n)             // n의 2진수에서 1의 개수
+n % m                           // 나머지는 % 연산자 (Math.mod 같은 메소드는 없음)
+Character.getNumericValue(c)    // '7' -> 7  (또는 c - '0')
+Character.isDigit(c)            // 숫자 문자인지
+Character.isLetter(c)           // 글자(알파벳 등)인지
+Character.isUpperCase(c)        // 대문자인지
+
+Math.max(a, b)                  // 큰 값
+Math.min(a, b)                  // 작은 값
+Math.abs(x)                     // 절댓값
+Math.pow(a, b)                  // a의 b제곱 (double 반환 -> 캐스팅 주의)
+Math.sqrt(x)                    // 제곱근
+Math.ceil(x)                    // 올림
+Math.floor(x)                   // 내림
+// 정수끼리 나누면 소수점이 날아가니 (double) 캐스팅 또는 5 / 2.0 처럼 쓰기
+
+
+// ============================================================
+// 3. 배열 (Arrays)
+// ============================================================
+
+Arrays.sort(arr)                              // 오름차순 (원본을 직접 바꿈)
+Arrays.sort(arr, Collections.reverseOrder())  // 내림차순 (Integer[] 만 가능, int[] 는 불가)
+Arrays.sort(arr, (a, b) -> a[0] - b[0]);      // 2차원 배열을 0번째 값 기준으로 정렬
+Arrays.fill(arr, -1)                          // 배열 전체를 -1 로 채움
+Arrays.copyOf(arr, n)                         // 앞에서 n개 복사
+Arrays.copyOfRange(arr, a, b)                 // [a, b) 구간 복사
+Arrays.toString(arr)                          // 배열 내용을 문자열로 (디버깅 출력용)
+Arrays.stream(arr).sum()                      // 합
+Arrays.stream(arr).max().getAsInt()           // 최댓값
+Arrays.stream(arr).min().getAsInt()           // 최솟값
+Arrays.stream(arr).boxed().toArray(Integer[]::new)  // int[] -> Integer[]
+
+
+// ============================================================
+// 4. 컬렉션
+// ============================================================
+
+// ---------- ArrayList ----------
+list.add(x);                // 맨 뒤에 추가
+list.get(i);                // i번째 값
+list.set(i, x);             // i번째 값을 x 로 교체
+list.remove(i);             // i번째 삭제
+list.size();                // 개수
+list.contains(x);           // 포함 여부
+list.isEmpty();             // 비었는지
+Collections.sort(list);     // 오름차순 정렬
+Collections.reverse(list);  // 뒤집기
+Collections.max(list);      // 최댓값 (min 도 있음)
+list.stream().mapToInt(i -> i).toArray();   // List<Integer> -> int[]
+
+// ---------- HashMap (정말 자주 나옴) ----------
+map.put(k, v);                           // 값 저장 (같은 키면 덮어씀)
+map.get(k);                              // 값 꺼내기 (키가 없으면 null)
+map.containsKey(k);                      // 키가 있는지
+map.getOrDefault(k, 0);                  // ★ 키가 없으면 기본값(0) 반환
+map.put(k, map.getOrDefault(k, 0) + 1);  // 빈도수 세기 패턴
+map.merge(k, 1, Integer::sum);           // 위와 같은 동작 (Java 8 이상)
+map.keySet();                            // 키 모음
+map.values();                            // 값 모음
+map.entrySet();                          // (키, 값) 쌍 모음
+
+// ---------- HashSet ----------
+set.add(x);                 // 추가 (중복은 무시됨)
+set.contains(x);            // 있는지
+set.remove(x);              // 삭제
+set.size();                 // 개수
+
+// ---------- Stack ----------
+Stack<Integer> st = new Stack<>();
+st.push(x);                 // 맨 위에 넣기
+st.pop();                   // 맨 위 꺼내기 (제거)
+st.peek();                  // 맨 위 보기 (제거 안 함)
+st.isEmpty();               // 비었는지
+
+// ---------- Queue ----------
+Queue<Integer> q = new LinkedList<>();
+q.offer(x);                 // 뒤에 넣기
+q.poll();                   // 앞에서 꺼내기 (제거)
+q.peek();                   // 앞 보기 (제거 안 함)
+q.isEmpty();                // 비었는지
+
+// ---------- Deque (스택/큐 둘 다 가능, 더 빠름) ----------
+Deque<Integer> dq = new ArrayDeque<>();
+dq.offerFirst(x);           // 앞에 넣기
+dq.offerLast(x);            // 뒤에 넣기
+dq.pollFirst();             // 앞에서 꺼내기
+dq.pollLast();              // 뒤에서 꺼내기
+
+// ---------- PriorityQueue (힙) ----------
+PriorityQueue<Integer> pq = new PriorityQueue<>();                           // 최소 힙 (작은 값부터 나옴)
+PriorityQueue<Integer> pq = new PriorityQueue<>(Collections.reverseOrder()); // 최대 힙 (큰 값부터 나옴)
+PriorityQueue<int[]> pq = new PriorityQueue<>((a, b) -> a[1] - b[1]);        // 커스텀 (1번째 값 기준 작은 순)
+
+// ---------- TreeMap / TreeSet ----------
+// 정렬을 유지해야 할 때 사용: firstKey(), floor(), ceiling() 등
+
+
+// ============================================================
+// 5. 스트림 (알아두면 코드가 짧아짐)
+// ============================================================
+
+Arrays.stream(arr).sum();                         // 배열 합
+Arrays.stream(arr).max().getAsInt();              // 배열 최댓값
+list.stream().mapToInt(Integer::intValue).toArray();  // List<Integer> -> int[]
+IntStream.range(0, n)                             // 0 ~ n-1 까지의 숫자 흐름
+// 가독성이나 속도 면에서 반복문이 더 나을 때도 많음 -> 변환 용도로만 쓰는 걸 추천
+
+
+// ============================================================
+// 6. 자주 하는 실수 / 알아둘 팁
+// ============================================================
+
+// - 정렬 비교자에서 a - b : 값이 크면 오버플로우 위험 -> Integer.compare(a, b) 가 안전
+// - Integer 객체 비교는 == 가 아니라 .equals() (127 초과에서 틀림)
+// - int 범위 초과 : 합/곱이 21억을 넘을 수 있으면 long 사용
+// - List<Integer> 에서 remove(int) vs remove(Object)
+//       list.remove(i)                    -> i번째 "위치" 삭제
+//       list.remove(Integer.valueOf(x))   -> 값이 x 인 것 삭제
+// - 2차원 배열 초기화 : new int[n][m], 가변 길이는 new int[n][]
+// - 정수 나눗셈 : 5 / 2 = 2, 실수가 필요하면 5 / 2.0
+// - char 연산 : (char)(c + 1), c - 'a' 로 알파벳 인덱스(0~25) 구하기
+
+
+// ============================================================
+// 7. 틀렸던 포인트 (제출 전에 확인)
+// ============================================================
+
+// - Stack 은 비어 있을 때 peek() / pop() 하면 EmptyStackException
+//       -> 항상 !stack.isEmpty() 를 먼저 검사
+// - && 는 왼쪽이 거짓이면 오른쪽을 실행하지 않음 (단락 평가)
+//       !stack.isEmpty() && c == stack.peek()    // O : 비면 peek() 실행 안 됨
+//       c == stack.peek() && !stack.isEmpty()    // X : 순서가 바뀌면 에러
+// - push 와 pop 은 if / else 로 묶기 (if 두 개를 연달아 쓰면 방금 넣은 걸 바로 뺌)
+// - 반복문 끝값을 포함해야 하면 <=   (숫자의 표현 : i <= n 이어야 n 자기 자신 포함)
+// - while 조건의 부등호 방향 : "n 이하인 동안" 이면 startNum <= n
+// - 반복마다 리셋해야 하는 변수(sum 등)는 반복문 안에서 0 으로 초기화
+// - 값이 너무 커지는 문제 : 마지막에만 % 하면 이미 int 오버플로우
+//       -> 계산할 때마다 중간중간 %   ( (a + b) % m == ((a % m) + (b % m)) % m )
+// - 문자열 길이가 100만이면 "지우고 처음부터 다시 훑기"는 O(n^2) -> 시간 초과
+// - Queue 는 인터페이스라 new Queue<>() 불가 -> new LinkedList<>() / new ArrayDeque<>()
+// - Char 라는 타입은 없음 : 기본형 char, 래퍼 Character   (char[] 또는 Character[])
+// - queue.toArray() 는 Object[] 를 돌려줌 -> char[] 에 바로 못 넣음
+// - 여러 번 검사(회전 등)할 때 스택은 매 회차마다 새로 만들거나 clear()
+// - 괄호 짝 검사는 "같은 글자"가 아니라 "닫는 괄호에 맞는 여는 괄호"인지 비교
+// - 괄호 검사 분기는 "스택이 비었냐"가 아니라 "여는 괄호냐 / 닫는 괄호냐"로 먼저 나누기
+//       (스택이 비었을 때만 push 하면, 스택에 뭔가 있을 때 여는 괄호가 안 들어감)
+// - 닫는 괄호가 나왔다고 무조건 break X -> 짝이 안 맞을 때만 실패 처리 (boolean ok)
+// - 성공 조건 방향 확인 : 올바른 괄호는 끝에 stack.isEmpty() 가 true (!isEmpty 아님)
+// - 입력이 10^7 이면 n*n 배열은 절대 못 만듦 (n*n 자체가 int 오버플로우 + 메모리 초과)
+//       -> 필요한 구간(left~right)만 돌면서 값을 "계산"
+// - long 을 int 로 바꿀 때 캐스팅 위치 : (int) k / n 은 ((int) k) / n -> k 가 크면 깨짐
+//       -> (int) (k / n) 처럼 계산 다음에 캐스팅
+// - int[] answer = {}; 는 길이 0 배열 -> 칸에 넣는 순간 ArrayIndexOutOfBounds
+//       -> 길이를 알면 new int[len] 으로 만들기
+// - map 을 다 돌 때 원래 배열 인덱스 clothes[i][1] 로 키를 꺼내면 X (의상)
+//       i < map.size() 라도 clothes 앞쪽에 같은 종류가 겹치면 어떤 키는 두 번, 어떤 키는 빠짐
+//       -> for (int v : map.values()) 또는 for (String k : map.keySet()) 로 map 자체를 돌기
+// - 제출 전 System.out.println 디버그 출력은 지우기 (출력이 많으면 느려짐)
+// - 답 후보를 "배열에 있는 값"으로만 잡으면 X (H-Index)
+//       h 는 배열에 없는 값일 수 있음 : [10, 10, 10] -> 답 3 (배열엔 10 뿐)
+//       -> 후보 범위 자체를 돌기 (h = 0 ~ n)  or  정렬해서 위치로 판단
+// - if / else if 로 나눠 센 두 개수의 합은 항상 전체 -> cnt + cnt2 == n 은 의미 없는 조건
+// - 순서를 바꿔 가며 다 해봐야 하는데 이중 for문으로 "앞에서부터 한 순서"만 시도하면 X (피로도)
+//       바깥 i 만 바뀌고 나머지 순서는 고정 -> 순열은 재귀 + visited 로
+// - 재귀 인자에 count++ 넘기면 X : 후위 증가라 증가 전 값이 넘어가고, 내 count 까지 바뀜
+//       -> dfs(..., count + 1) 처럼 새 값을 계산해서 넘기기 (변수 자체는 건드리지 않기)
+// - visited 를 true 로 했으면 재귀 끝나고 false 로 되돌리기 (백트래킹)
+// - 크기 0 같은 경계값 확인 (캐시) : cacheSize == 0 인데 "꽉 찼으면 poll 하고 add" 하면
+//       poll() 은 빈 큐에서 에러 없이 null -> 그다음 add 로 크기 0 캐시에 1개가 들어가 버림
+//       -> 다음에 같은 도시가 오면 hit(+1) 로 잘못 셈. 맨 앞에서 if (cacheSize == 0) return cities.length * 5;
+// - 분기는 "핵심 기준 하나"로 먼저 나누기 (캐시) : hit/miss 는 contains 로만 결정
+//       크기 조건은 miss 안에서 "꽉 찼으면 poll" 로만 쓰면 4갈래 -> 2갈래로 줄고 빠지는 경우가 안 생김
+// - 격자 이동을 for (i = 현재행; ...) (j = 현재열; ...) 로 돌면 X (게임 맵 최단거리)
+//       위(i 감소) / 왼쪽(j 감소)은 아예 못 가고, 대각선 (i+1, j+1) 까지 들어감
+//       -> int[] dx = {-1, 1, 0, 0}, dy = {0, 0, -1, 1}; 4방향 배열 + 범위 체크
+// - 도착점은 (n-1, m-1) : 인덱스는 0부터라 (maps.length, maps[0].length) 는 맵 밖
+// - 도착 못 한 칸마다 answer = -1 로 덮어쓰면 앞에서 찾은 답이 날아감
+//       -> 끝까지 다 본 다음에 "한 번도 못 닿았으면 -1"
+// - 위치 배열(pos)을 재귀에 그대로 넘기고 값을 바꾸면 X : 돌아와도 원래 위치로 안 돌아옴
+//       -> int x, int y 처럼 값으로 넘기거나 new int[]{nx, ny} 로 새로 만들기
+// - 시작칸도 방문 처리하기 (visited[0][0])
+// - "최단거리"를 DFS 로 모든 경로 다 가보면 경로 수가 폭발 -> 효율성 시간 초과 => BFS
+// - BFS 를 if / else if 방향 우선순위(동쪽 먼저, 안 되면 남쪽...)로 짜면 X
+//       한 길만 따라가다 막다른 길에서 못 돌아옴 -> 4방향 전부 for 로 큐에 넣기
+// - if (maps[i][j] = 1) 은 대입 -> 비교는 ==
+// - 문제의 숫자 의미 확인 : 게임 맵은 1 = 길, 0 = 벽 (반대로 넣지 않기)
+// - int x, y = 0; 은 y 만 0 (x 는 초기화 안 됨) -> int x = 0, y = 0;
+// - road[x][y+1] 처럼 범위 체크 없이 옆 칸 접근하면 가장자리에서 ArrayIndexOutOfBounds
+//       -> nx, ny 먼저 구하고 0 <= nx < m && 0 <= ny < n 부터 검사
+// - 범위 체크는 nx >= maps.length (> 아님!) : 인덱스는 length-1 까지라 length 도 맵 밖
+// - queue.add({nx, ny}) 는 컴파일 에러 -> queue.add(new int[]{nx, ny})
+// - BFS 방문 처리는 큐에서 "꺼낼 때" X, "넣을 때" O (시작칸도 넣을 때 바로)
+//       꺼낼 때 막으면 같은 칸이 큐에 여러 번 들어가고 dist 가 더 먼 값으로 덮어써질 수 있음
+// - 변수 이름과 뜻을 맞추기 : visited 를 true = "갈 수 있음" 으로 쓰면 헷갈림 (canGo 등)
+// - Arrays.stream(queue.toArray()) 는 Object 스트림 -> max().getAsInt() 같은 숫자 메서드 없음 (프로세스)
+//       -> queue.stream().anyMatch(x -> x > cur)  또는  for (int x : queue) 로 직접 비교
+// - 메서드 호출은 괄호 필수 : getAsInt (X)  getAsInt() (O)
+// - 큐에서 뒤로 돌린 원소는 원래 인덱스를 잃음 -> chk[i % len] 처럼 카운터로 위치 추적 X (프로세스)
+//       -> 큐에 new int[]{원래 인덱스, 값} 을 같이 넣어서 들고 다니기
+// - Queue<Integer, Integer> 는 컴파일 에러 : Queue 는 타입 하나만 받음 (Map 이랑 헷갈리지 않기)
+//       -> 두 값을 같이 넣으려면 Queue<int[]>
+// - 다시 뒤로 보낸(add) 원소는 실행된 게 아님 -> 그 뒤 처리(location 체크, count++)까지 내려가면 X
+//       -> continue 또는 if / else 로 "실행된 경우"에만 세기
+
+
+// ============================================================
+// 8. 문제 유형별 패턴
+// ============================================================
+
+// ---------- 짝지어 제거 / 괄호 -> Stack ----------
+// @hint: no
+// 문자를 하나씩 보면서
+//   스택이 비어 있지 않고 맨 위가 지금 글자와 같으면 pop, 아니면 push
+//   끝에 스택이 비어 있으면 성공
+Stack<Character> stack = new Stack<>();
+for (int i = 0; i < s.length(); i++) {
+    char c = s.charAt(i);
+    if (!stack.isEmpty() && c == stack.peek()) stack.pop();
+    else stack.push(c);
+}
+// return stack.isEmpty() ? 1 : 0;
+
+// ---------- 괄호 회전하기 -> 회전은 인덱스 (x + j) % n, 짝 검사는 Stack ----------
+// @hint: yes
+// @review: 2026-11-03
+// 문자열을 실제로 돌리지 않고 x칸 회전한 문자열의 j번째 = s.charAt((x + j) % n)
+// 여는 괄호 push, 닫는 괄호면 (비었거나 짝 안 맞으면 실패) 아니면 pop, 끝에 비어 있으면 성공
+// 큐로 회전 : queue.add(queue.poll())  -> 맨 앞을 맨 뒤로 = 왼쪽으로 한 칸 회전
+//   큐를 n번 poll -> add 하며 훑으면 원래 순서로 돌아옴 (중간에 break 하면 순서 깨짐 -> boolean 으로 표시)
+// 내 풀이 : 짝 안 맞으면 닫는 괄호도 그냥 push -> 맨 위에 닫는 괄호가 오면 다시는 pop 안 됨
+//           -> 끝에 stack.isEmpty() 하나로 실패까지 같이 걸러짐
+for (int i = 0; i < len; i++) {
+    stack.clear();                                // 회전마다 스택 비우기
+    for (int j = 0; j < len; j++) {
+        char c = s.charAt((i + j) % len);
+        if (!stack.isEmpty() && ((stack.peek() == '(' && c == ')')
+                              || (stack.peek() == '[' && c == ']')
+                              || (stack.peek() == '{' && c == '}'))) stack.pop();
+        else stack.push(c);
+    }
+    if (stack.isEmpty()) answer++;
+}
+
+// ---------- 의상 -> 종류별 개수 세고 (개수 + 1) 을 전부 곱하기 - 1 ----------
+// @hint: yes
+// @review: 2026-11-04
+// 종류마다 선택지 = 그 종류 옷 개수 + "안 입기" 1개 -> 경우의 수는 곱의 법칙
+// 마지막 -1 : 전부 안 입는 경우 하나 빼기 (최소 한 개는 입어야 함)
+// getOrDefault(k, 1) + 1 로 세면 처음부터 "개수 + 1" 이 저장됨 (default 0 이면 곱할 때 +1)
+// 곱할 때는 map.values() 를 돌기 (배열 인덱스로 키 꺼내지 않기)
+int answer = 1;
+for (int cnt : map.values()) answer *= cnt;   // map 에 개수+1 이 들어 있을 때
+// return answer - 1;
+
+// ---------- n^2 배열 자르기 -> 배열 안 만들고 인덱스로 값 계산 ----------
+// @hint: yes
+// @review: 2026-11-04
+// 1차원 인덱스 k -> 행 i = k / n, 열 j = k % n  (2차원 <-> 1차원 변환 공식)
+// 작은 n(3)으로 표를 그려 보면 칸의 값 = max(i, j) + 1
+// 사고법 : 입력이 너무 크면 "다 만들고 꺼내기" 말고 "규칙 찾아서 바로 계산"
+//          -> 작은 예시를 손으로 그려서 칸 값과 (i, j) 의 관계 찾기
+// 복잡도 : O(right - left) (구간 길이 10^5 이하) -> n 이 10^7 이어도 상관없음
+int[] answer = new int[(int) (right - left + 1)];
+for (long k = left; k <= right; k++) {
+    int i = (int) (k / n);                // 나눈 다음에 캐스팅
+    int j = (int) (k % n);
+    answer[(int) (k - left)] = Math.max(i, j) + 1;
+}
+
+// ---------- H-Index -> 내림차순으로 보면서 "i+1 번째 논문 인용수 >= i+1" 인 동안 h = i+1 ----------
+// @hint: yes
+// @review: 2026-11-05
+// h 의 범위는 0 ~ n (h편 이상이어야 하니 n 보다 클 수 없음). 배열 값만 후보로 잡지 않기
+// 방법 1 (완전탐색, n <= 1000 이라 충분) : h 를 n 부터 0 까지 내려가며 h번 이상 인용된 논문 수 >= h 면 바로 return
+// 방법 2 (정렬) : 오름차순 정렬 후 citations[i] >= n - i 가 처음 되는 i 에서 h = n - i
+//   (n - i = citations[i] 이상인 논문 수)
+Arrays.sort(citations);
+int n = citations.length;
+for (int i = 0; i < n; i++) {
+    if (citations[i] >= n - i) return n - i;   // 남은 논문 수(n - i)가 h
+}
+// return 0;   // 전부 0 인용 같은 경우
+
+// ---------- 피로도 -> 순열 완전탐색 (재귀 + visited + 되돌리기) ----------
+// @hint: yes
+// @review: 2026-11-05
+// 던전 최대 8개 -> 8! = 40,320 가지 순서를 전부 해봐도 충분
+// 갈 수 있는 던전 하나 골라 들어가고 나머지는 재귀에 맡김. 매 호출마다 지금까지 개수로 answer 갱신
+// "중간부터 시작해서 앞으로" 같은 임의의 순서가 필요하면 이중 for문 말고 이 패턴
+// 왜 무한히 안 도나 : 호출마다 visited 가 하나씩 늘어 깊이는 최대 n. 갈 데 없으면 for 가 다 continue -> 그냥 return
+// 디버깅 : "    ".repeat(count) 로 들여쓰기 해서 진입/선택 시점에 println 하면 트리 모양으로 보임
+// 원복 규칙 : 매개변수(k, count)는 호출마다 따로 생김 -> k - cost 처럼 새 값을 넘기면 원복 필요 없음
+//            필드(visited)는 모든 호출이 같이 씀 -> 바꿨으면 false 로 직접 원복
+//            (k -= cost 로 k 자체를 바꿨다면 dfs 뒤에 k += cost 필요)
+void dfs(int k, int count, int[][] dungeons) {
+    answer = Math.max(answer, count);
+    for (int i = 0; i < dungeons.length; i++) {
+        if (visited[i] || k < dungeons[i][0]) continue;   // 이미 갔거나 피로도 부족
+        visited[i] = true;
+        dfs(k - dungeons[i][1], count + 1, dungeons);      // count++ 아님
+        visited[i] = false;                                // 되돌리기
+    }
+}
+
+// ---------- 행렬의 곱셈 -> 3중 for문 (i 행, j 열, k 겹치는 길이) ----------
+// @hint: no
+// (a x b) * (b x c) = (a x c). 곱할 수 있는 조건 : arr1[0].length == arr2.length (= k 범위)
+// 결과 크기 : new int[arr1.length][arr2[0].length]
+// answer[i][j] = arr1 의 i행과 arr2 의 j열을 같은 k 끼리 곱해서 전부 더한 값
+// int 배열은 0 으로 초기화돼 있으니 바로 += 해도 됨
+int[][] answer = new int[arr1.length][arr2[0].length];
+for (int i = 0; i < arr1.length; i++)
+    for (int j = 0; j < arr2[0].length; j++)
+        for (int k = 0; k < arr1[0].length; k++)   // arr2.length 로 써도 같음
+            answer[i][j] += arr1[i][k] * arr2[k][j];
+
+// ---------- 다음 큰 숫자 -> 1씩 올려 가며 bitCount 비교 ----------
+// @hint: no
+// 작은 쪽부터 올라가니까 처음 조건에 맞는 수가 곧 최솟값 (따로 최솟값 찾을 필요 없음)
+int ones = Integer.bitCount(n);
+int next = n + 1;
+while (Integer.bitCount(next) != ones) next++;
+// return next;
+
+// ---------- 숫자의 표현 -> 시작점마다 더해 보기 ----------
+// @hint: no
+for (int start = 1; start <= n; start++) {
+    int sum = 0;                          // 시작점이 바뀔 때마다 0 으로 초기화
+    for (int i = start; i <= n; i++) {
+        sum += i;
+        if (sum == n) { answer++; break; }   // 같으면 방법 +1
+        if (sum > n) break;                  // 넘으면 다음 시작점으로
+    }
+}
+
+// ---------- 피보나치 -> 변수 두 개를 한 칸씩 밀기 ----------
+// @hint: no
+// first, second 는 "가장 최근 연속된 두 항". 밀 때 순서가 중요함
+int first = 0, second = 1, cur = 0;
+for (int i = 2; i <= n; i++) {
+    cur = (first + second) % 1234567;     // 더하면서 바로 나머지
+    first = second;                       // 먼저 first 를 옮기고
+    second = cur;                         // 그다음 second 를 갱신
+}
+// return cur;
+
+
+// ---------- 롤케이크 자르기 -> 오른쪽 HashMap(개수) + 왼쪽 HashSet ----------
+// @hint: no
+// 자르는 위치마다 양쪽 종류 수를 새로 세면 O(n^2) -> 시간 초과
+// 처음에 전부 오른쪽(map)에 개수로 넣고, 한 칸씩 왼쪽(set)으로 옮기면 O(n)
+// map 은 "남은 개수", set 은 "있냐 없냐"만 필요 -> 종류 수 = size()
+// 개수가 0 이 되면 꼭 remove 해야 map.size() 가 종류 수가 됨
+Map<Integer, Integer> right = new HashMap<>();
+Set<Integer> left = new HashSet<>();
+for (int t : topping) right.put(t, right.getOrDefault(t, 0) + 1);
+for (int t : topping) {
+    left.add(t);
+    right.put(t, right.get(t) - 1);
+    if (right.get(t) == 0) right.remove(t);    // 0 남은 키 지우기
+    if (left.size() == right.size()) answer++;
+}
+
+// ---------- [1차] 캐시 -> LRU (가장 오래 안 쓴 것부터 버리기) ----------
+// @hint: yes
+// @review: 2026-11-05
+// 캐시 = 순서가 있는 리스트. 앞쪽 = 가장 오래 안 쓴 것, 뒤쪽 = 방금 쓴 것
+// hit (이미 있음)  : +1, 그 도시를 리스트에서 빼서 맨 뒤로 다시 넣기 (최근 사용으로 갱신)
+// miss (없음)      : +5, 꽉 찼으면 맨 앞(가장 오래된 것)을 버리고 맨 뒤에 넣기
+// 대소문자 구분 X -> 비교 전에 toLowerCase() 로 통일 ("Jeju" == "jeju")
+// cacheSize == 0 이면 캐시에 아무것도 못 넣음 -> 전부 miss (도시 수 * 5). 빈 리스트에서 꺼내다 에러 주의
+// 도구 : LinkedList<String> 의 contains / remove(Object) / removeFirst / addLast
+//        (cacheSize 최대 30 이라 contains 의 O(n) 도 충분히 빠름)
+
+// ---------- 게임 맵 최단거리 -> BFS (격자 최단거리) ----------
+// @hint: yes
+// @review: 2026-11-08
+// BFS(너비 우선) vs DFS(깊이 우선)
+//   DFS : 한 길을 끝까지 가보고 막히면 되돌아옴 (재귀 / Stack) -> 모든 경우, 순열/조합
+//   BFS : 가까운 칸부터 한 겹씩 (1칸 -> 2칸 -> 3칸) 넓혀감 (Queue, FIFO) -> 최단거리
+//   Queue 라서 먼저 넣은(가까운) 칸이 먼저 나옴 -> 거리 순서가 자동으로 지켜짐
+// "최단거리 / 최소 칸 수" + 모든 칸 이동 비용이 같음 -> BFS
+// BFS 는 1칸, 2칸, 3칸 ... 거리 순서대로 퍼짐 -> 도착점에 "처음" 닿는 순간이 최단거리
+// DFS(완전탐색)는 모든 경로를 끝까지 가봄 -> 맞긴 해도 맵이 크면 시간 초과
+// 틀 : Queue<int[]> 에 {행, 열} 넣기 + dist[][] 에 "여기까지 몇 칸" 저장 (dist 가 visited 역할도 함)
+//      꺼낼 때마다 dx/dy 4방향 -> 범위 안 && 벽 아님 && 처음 방문이면 dist = 현재 + 1, 큐에 넣기
+//      큐가 빌 때까지 도착점에 못 닿으면 -1
+// 넣을 때 방문 처리해야 같은 칸이 큐에 여러 번 안 들어감
+// dist[x][y] = 시작점에서 (x, y) 까지 몇 칸. dist[새칸] = dist[지금칸] + 1
+//   꺼낼 때마다 count++ 하면 X : 그건 거리가 아니라 "꺼낸 칸 총개수" (갈래가 여러 개라 섞임)
+//   count 를 쓰고 싶으면 int size = queue.size(); 만큼 한 겹 처리하고 겹이 끝날 때 count++
+
+// ---------- 프로세스 -> Queue<int[]>{인덱스, 우선순위} + "더 큰 게 남았나" 검사 ----------
+// @hint: yes
+// @review: 2026-11-08
+// 맨 앞을 꺼내서 뒤에 더 큰 우선순위가 있으면 다시 뒤로(add), 없으면 실행(count++)
+// 실행한 게 location 이면 그때의 count 가 답 -> 바로 return (실행 순서 배열 따로 필요 없음)
+// 핵심 : 원소가 뒤로 돌면 위치가 바뀌니까 "원래 인덱스"를 원소와 같이 저장
+// 더 큰 값 검사 : queue.stream().anyMatch(p -> p[1] > cur[1])  (n <= 100 이라 매번 훑어도 충분)
+// 심화 : 우선순위만 PriorityQueue(Collections.reverseOrder()) 에 넣어 두면 pq.peek() 가 "지금 최댓값"
+//        실행할 때마다 pq.poll() 로 같이 빼기
+Queue<int[]> queue = new LinkedList<>();               // {원래 인덱스, 우선순위}
+for (int i = 0; i < priorities.length; i++) queue.add(new int[]{i, priorities[i]});
+int proceed = 1;
+while (!queue.isEmpty()) {
+    int[] cur = queue.poll();
+    if (queue.stream().anyMatch(x -> x[1] > cur[1])) queue.add(cur);   // 더 큰 게 있으면 뒤로
+    else {
+        if (cur[0] == location) return proceed;      // 실행된 경우에만 확인
+        proceed++;
+    }
+}
+
+// ============================================================
+// 우선순위 (시간이 부족하다면 이 순서로 익히기)
+// ============================================================
+
+// 1. HashMap (getOrDefault, merge), ArrayList
+// 2. Arrays.sort + 람다 비교자, Collections.sort
+// 3. StringBuilder, split, toCharArray
+// 4. Queue / Deque / PriorityQueue (BFS, 우선순위 문제)
+// 5. Integer.parseInt, toBinaryString, 진법 변환
