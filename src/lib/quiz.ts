@@ -34,6 +34,8 @@ export const KIND_LABEL: Record<QuizKind, string> = {
 const uniq = (xs: string[]) => [...new Set(xs)]
 /** 보기에서 눈에 띄는 표시(★)는 빼서 정답이 티 나지 않게 */
 const clean = (s: string) => s.replace(/[★☆]/g, '').trim()
+/** "위와 같은 동작"처럼 앞 줄을 봐야 뜻이 통하는 설명은 퀴즈에서 뺀다 */
+const CONTEXTUAL = /^(위|앞|이전)(와|의|에서|\s)/
 
 export function buildQuizzes(d: NotesData): QuizItem[] {
   const out: QuizItem[] = []
@@ -43,12 +45,12 @@ export function buildQuizzes(d: NotesData): QuizItem[] {
   for (const s of d.cheats) {
     const rows = s.groups
       .flatMap((g) => g.rows.map((r) => ({ ...r, desc: clean(r.desc), group: g.title })))
-      .filter((r) => r.desc && r.code.length <= 90)
+      .filter((r) => r.desc && !CONTEXTUAL.test(r.desc) && r.code.length <= 90)
     for (const r of rows) {
       if (seen.has(r.code)) continue
       seen.add(r.code)
       const sameSecDescs = rows.filter((o) => o.desc !== r.desc).map((o) => o.desc)
-      const allDescs = d.cheats.flatMap((c) => c.groups.flatMap((g) => g.rows)).map((o) => clean(o.desc)).filter((d) => d && d !== r.desc)
+      const allDescs = d.cheats.flatMap((c) => c.groups.flatMap((g) => g.rows)).map((o) => clean(o.desc)).filter((d) => d && d !== r.desc && !CONTEXTUAL.test(d))
       const descPool = uniq(sameSecDescs.length >= 3 ? sameSecDescs : [...sameSecDescs, ...allDescs])
       out.push({
         id: `md:${r.code}`,
