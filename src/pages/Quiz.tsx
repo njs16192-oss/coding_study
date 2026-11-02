@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { allTags, notes, problemById, quizzes } from '../data'
-import { useQuizStats, useReviewLog } from '../lib/store'
+import { HISTORY_LIMIT, useQuizHistory, useQuizRun, useQuizStats, useReviewLog, type QuizAnswerRecord } from '../lib/store'
 import { reviewState, today } from '../lib/review'
-import { KIND_LABEL, pickQuestions, type QuizItem, type QuizQuestion } from '../lib/quiz'
+import { KIND_LABEL, pickQuestions, toQuestion, type QuizItem, type QuizQuestion } from '../lib/quiz'
 import { go, href } from '../lib/router'
 import { Card, Empty, Icon, cx } from '../components/ui'
+import QuizHistory, { fmtDate } from './QuizHistory'
 
 const COUNT = 10
 
@@ -43,42 +44,56 @@ function useScopes(): Scope[] {
   ]
 }
 
-export default function QuizPage({ query }: { query: URLSearchParams }) {
+
+export default function QuizPage({ sub, query }: { sub: string | null; query: URLSearchParams }) {
+  if (sub === 'history') return <QuizHistory />
+  return <QuizPlay query={query} />
+}
+
+function QuizPlay({ query }: { query: URLSearchParams }) {
   const scopes = useScopes()
   const [stats, setStats] = useQuizStats()
-  const problemId = query.get('problem')
-  const scopeKey = query.get('scope') ?? 'all'
+  const [log, setLog] = useQuizHistory()
+  const [run, setRun] = useQuizRun<QuizQuestion>()
+  const scopeParam = query.get('scope') ?? 'all'
+  const problemId = query.get('problem') ?? (scopeParam.startsWith('problem:') ? scopeParam.slice(8) : null)
   const scope: Scope = problemId
     ? { key: 'problem:' + problemId, label: problemById.get(problemId)?.title ?? '문제', desc: '', filter: (q) => q.problemId === problemId }
-    : (scopes.find((s) => s.key === scopeKey) ?? scopes[0])
+    : (scopes.find((s) => s.key === scopeParam) ?? scopes[0])
   const pool = useMemo(() => quizzes.filter(scope.filter), [scope.key, stats])
 
-  const [questions, setQuestions] = useState<QuizQuestion[] | null>(null)
-  const [idx, setIdx] = useState(0)
-  const [picked, setPicked] = useState<string | null>(null)
-  const [results, setResults] = useState<boolean[]>([])
-
-  const start = () => {
-    setQuestions(pickQuestions(pool, stats, COUNT))
-    setIdx(0)
-    setPicked(null)
-    setResults([])
+  const begin = (questions: QuizQuestion[], key = scope.key, label = scope.label) => {
+    const now = new Date()
+    setRun(() => ({ id: String(now.getTime()), at: now.toISOString(), scopeKey: key, scopeLabel: label, questions, idx: 0, picked: null, picks: [], results: [] }))
   }
+  const start = () => begin(pickQuestions(pool, stats, COUNT))
 
-  // 링크로 들어오면 바로 시작 (?start=1 또는 ?problem=)
+  // 링크로 들어오면 (?start=1 또는 ?problem=) 시작. 같은 범위를 풀던 중이면 이어서.
+  // 주소에서 start 를 지워 두어, 다른 화면에 갔다가 "뒤로" 와도 새로 시작되지 않게 한다.
   useEffect(() => {
-    if ((query.get('start') === '1' || problemId) && pool.length) start()
-    else setQuestions(null)
+    const trigger = query.get('start') === '1' || !!query.get('problem')
+    if (!trigger) return
+    const unfinished = run && run.idx < run.questions.length
+    if (!(unfinished && run.scopeKey === scope.key) && pool.length) start()
+    window.history.replaceState(null, '', href('/quiz', { scope: scope.key }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope.key, query.get('start')])
+  }, [query])
 
-  if (!questions) {
+  if (!run) {
     return (
       <div className="mx-auto max-w-2xl space-y-5">
         <div>
           <h2 className="text-xl font-bold">복습 퀴즈</h2>
           <p className="text-sm text-slate-500">정리 파일에서 자동으로 만든 4지선다 {quizzes.length}문제. 틀린 문제는 다음에 더 자주 나와요.</p>
         </div>
+        <a href={href('/quiz/history')} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900">
+          <Icon name="clock" className="size-5 text-indigo-500" />
+          <span className="flex-1">
+            <span className="font-semibold">푼 퀴즈 기록</span>
+            <span className="ml-2 text-slate-500">{log.length ? `${log.length}판 · 최근 ${fmtDate(log[0].at)}` : '아직 없음'}</span>
+          </span>
+          <Icon name="arrow" className="size-4 text-slate-400" />
+        </a>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {scopes
             .filter((s) => !s.key.startsWith('tag:'))
@@ -132,7 +147,22 @@ export default function QuizPage({ query }: { query: URLSearchParams }) {
     )
   }
 
+  const { questions, idx, picked, results } = run
+  const label = run.scopeLabel
   if (!questions.length) return <Empty>이 범위에는 퀴즈가 없어요.</Empty>
+
+  const quit = () => setRun(() => null)
+  const changeScope = () => {
+    const key = run.scopeKey
+    setRun(() => null)
+    go('/quiz', { scope: key.startsWith('problem:') ? 'all' : key })
+  }
+  const again = () => {
+    const key = run.scopeKey
+    const sc = key.startsWith('problem:') ? { filter: (q: QuizItem) => q.problemId === key.slice(8) } : (scopes.find((s) => s.key === key) ?? scopes[0])
+    begin(pickQuestions(quizzes.filter(sc.filter), stats, COUNT), key, label)
+  }
+  const retryWrong = () => begin(questions.filter((_, i) => !results[i]).map((q) => toQuestion(q)), run.scopeKey, label + ' · 틀린 문제')
 
   // 결과 화면
   if (idx >= questions.length) {
@@ -140,7 +170,7 @@ export default function QuizPage({ query }: { query: URLSearchParams }) {
     return (
       <div className="mx-auto max-w-2xl space-y-5">
         <Card className="p-6 text-center">
-          <p className="text-sm text-slate-500">{scope.label}</p>
+          <p className="text-sm text-slate-500">{label}</p>
           <p className="mt-1 text-4xl font-bold">
             {right} / {questions.length}
           </p>
@@ -151,8 +181,9 @@ export default function QuizPage({ query }: { query: URLSearchParams }) {
             <li key={i} className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900">
               <Icon name={results[i] ? 'check' : 'x'} className={cx('mt-0.5 size-4', results[i] ? 'text-emerald-600' : 'text-red-500')} />
               <div className="min-w-0 flex-1">
-                <p className={cx(q.subjectIsCode && 'font-mono text-[13px]', 'break-words')}>{q.subject ?? q.prompt}</p>
+                <p className={cx(q.subjectIsCode && 'font-mono text-[13px]', 'break-words whitespace-pre-line')}>{q.subject ?? q.prompt}</p>
                 <p className={cx('text-slate-500', q.optionsAreCode && 'font-mono text-[13px]')}>→ {q.answer}</p>
+                {!results[i] && <p className={cx('text-red-500', q.optionsAreCode && 'font-mono text-[13px]')}>내 답: {run.picks[i]}</p>}
               </div>
               {q.problemId && (
                 <a href={href('/problems/' + q.problemId)} className="shrink-0 text-indigo-600 dark:text-indigo-300">
@@ -163,13 +194,22 @@ export default function QuizPage({ query }: { query: URLSearchParams }) {
           ))}
         </ul>
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={start} className="rounded-xl bg-indigo-600 py-3 font-semibold text-white">
-            한 번 더
-          </button>
-          <button onClick={() => go('/quiz', { scope: scope.key.startsWith('problem:') ? 'all' : scope.key })} className="rounded-xl border border-slate-200 py-3 font-semibold dark:border-slate-700">
+          {right < questions.length ? (
+            <button onClick={retryWrong} className="rounded-xl bg-indigo-600 py-3 font-semibold text-white">
+              틀린 {questions.length - right}문제 다시
+            </button>
+          ) : (
+            <button onClick={again} className="rounded-xl bg-indigo-600 py-3 font-semibold text-white">
+              한 번 더
+            </button>
+          )}
+          <button onClick={changeScope} className="rounded-xl border border-slate-200 py-3 font-semibold dark:border-slate-700">
             범위 바꾸기
           </button>
         </div>
+        <a href={href('/quiz/history')} className="block text-center text-sm text-indigo-600 dark:text-indigo-300">
+          지금까지 푼 기록 보기
+        </a>
       </div>
     )
   }
@@ -179,22 +219,40 @@ export default function QuizPage({ query }: { query: URLSearchParams }) {
   const choose = (opt: string) => {
     if (answered) return
     const ok = opt === q.answer
-    setPicked(opt)
-    setResults((r) => [...r, ok])
+    setRun((r) => (r ? { ...r, picked: opt, picks: [...r.picks, opt], results: [...r.results, ok] } : r))
     setStats((prev) => {
       const s = prev[q.id] ?? { right: 0, wrong: 0, last: '' }
       return { ...prev, [q.id]: { right: s.right + (ok ? 1 : 0), wrong: s.wrong + (ok ? 0 : 1), last: today() } }
     })
+    const rec: QuizAnswerRecord = {
+      qid: q.id,
+      kind: q.kind,
+      prompt: q.prompt,
+      subject: q.subject,
+      subjectIsCode: q.subjectIsCode,
+      options: q.options,
+      optionsAreCode: q.optionsAreCode,
+      answer: q.answer,
+      picked: opt,
+      ok,
+      problemId: q.problemId,
+      note: q.note,
+    }
+    // 한 문제 풀 때마다 기록에 바로 반영 (중간에 그만둬도 남음)
+    setLog((prev) => {
+      const cur = prev.find((h) => h.id === run.id)
+      const next = cur
+        ? { ...cur, answers: [...cur.answers, rec] }
+        : { id: run.id, at: run.at, scopeKey: run.scopeKey, scopeLabel: label, total: questions.length, answers: [rec] }
+      return [next, ...prev.filter((h) => h.id !== run.id)].slice(0, HISTORY_LIMIT)
+    })
   }
-  const next = () => {
-    setPicked(null)
-    setIdx((i) => i + 1)
-  }
+  const next = () => setRun((r) => (r ? { ...r, picked: null, idx: r.idx + 1 } : r))
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div className="flex items-center gap-3">
-        <button onClick={() => setQuestions(null)} className="rounded-lg p-1 text-slate-500" aria-label="그만하기">
+        <button onClick={quit} className="rounded-lg p-1 text-slate-500" aria-label="그만하기">
           <Icon name="x" />
         </button>
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
@@ -209,7 +267,7 @@ export default function QuizPage({ query }: { query: URLSearchParams }) {
         <p className="text-xs font-medium text-indigo-600 dark:text-indigo-300">{KIND_LABEL[q.kind]}</p>
         <p className="text-lg font-semibold">{q.prompt}</p>
         {q.subject && (
-          <div className={cx('rounded-lg bg-slate-100 px-3 py-2.5 dark:bg-slate-800', q.subjectIsCode ? 'font-mono text-sm break-all' : 'text-[15px] leading-7')}>{q.subject}</div>
+          <div className={cx('rounded-lg bg-slate-100 px-3 py-2.5 dark:bg-slate-800', q.subjectIsCode ? 'font-mono text-sm break-all' : 'text-[15px] leading-7 whitespace-pre-line')}>{q.subject}</div>
         )}
       </Card>
 
@@ -242,7 +300,12 @@ export default function QuizPage({ query }: { query: URLSearchParams }) {
         <div className="space-y-3">
           {(q.note || q.problemId) && (
             <Card className="space-y-2 p-4 text-sm">
-              {q.note && <pre className="font-sans whitespace-pre-wrap text-slate-600 dark:text-slate-300">{q.note}</pre>}
+              {q.note && (
+                <>
+                  <p className="text-xs font-semibold text-slate-500">해설</p>
+                  <pre className="font-sans whitespace-pre-wrap text-slate-600 dark:text-slate-300">{q.note}</pre>
+                </>
+              )}
               {q.problemId && (
                 <a href={href('/problems/' + q.problemId)} className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-300">
                   {problemById.get(q.problemId)?.title} 정리 보기 <Icon name="arrow" className="size-3.5" />

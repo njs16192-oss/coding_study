@@ -1,9 +1,9 @@
 // 정리 파일 내용으로 객관식 퀴즈 만들기. 파일이 바뀌면 문제도 같이 바뀐다.
-import type { NotesData } from './types'
+import type { ListItem, NotesData } from './types'
 import { TAG_ORDER } from './tags'
 import type { QuizStats } from './store'
 
-export type QuizKind = 'method-desc' | 'desc-method' | 'problem-core' | 'problem-tag' | 'mistake-fix' | 'custom'
+export type QuizKind = 'method-desc' | 'desc-method' | 'problem-core' | 'problem-tag' | 'mistake-fix' | 'mistake-result' | 'custom'
 
 export interface QuizItem {
   id: string
@@ -16,6 +16,8 @@ export interface QuizItem {
   /** 정답 외 보기 후보 (여기서 3개를 고른다) */
   pool: string[]
   optionsAreCode?: boolean
+  /** 직접 쓴 오답을 그대로 쓴다 (무작위로 섞어 고르지 않음) */
+  fixedOptions?: boolean
   problemId: string | null
   /** 풀고 나서 보여 줄 설명 */
   note?: string
@@ -28,6 +30,7 @@ export const KIND_LABEL: Record<QuizKind, string> = {
   'problem-core': '문제 → 핵심 풀이',
   'problem-tag': '문제 → 유형',
   'mistake-fix': '실수 → 고치는 법',
+  'mistake-result': '실수 → 결과',
   custom: '직접 만든 문제',
 }
 
@@ -36,6 +39,73 @@ const uniq = (xs: string[]) => [...new Set(xs)]
 const clean = (s: string) => s.replace(/[★☆]/g, '').trim()
 /** "위와 같은 동작"처럼 앞 줄을 봐야 뜻이 통하는 설명은 퀴즈에서 뺀다 */
 const CONTEXTUAL = /^(위|앞|이전)(와|의|에서|\s)/
+
+/** 결과(증상)를 말하는 조각: 이런 건 "고치는 법" 보기로 쓰지 않는다 */
+const RESULT = /(초과|에러|오류|Exception|깨짐|깨진|불가|못 넣음|없음|안 됨|틀림|폭발|오버플로우|날아감|느려짐|잘못 셈|의미 없는)/
+
+/** 괄호 밖에 있는 " -> ", " => ", ". " 에서만 자른다 (람다 x -> x 같은 코드 속 화살표는 그대로) */
+function splitOutside(s: string): string[] {
+  const out: string[] = []
+  let depth = 0
+  let buf = ''
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if ('({['.includes(c)) depth++
+    else if (')}]'.includes(c)) depth = Math.max(0, depth - 1)
+    if (depth === 0) {
+      const two = s.slice(i, i + 4)
+      if (/^\s(->|=>)\s$/.test(two)) {
+        out.push(buf)
+        buf = ''
+        i += 3
+        continue
+      }
+      if (c === '.' && s[i + 1] === ' ' && /[가-힣]/.test(s[i - 1] ?? '')) {
+        out.push(buf)
+        buf = ''
+        i++
+        continue
+      }
+    }
+    buf += c
+  }
+  out.push(buf)
+  return out.map((x) => x.trim()).filter(Boolean)
+}
+
+/** 끝에 붙은 띄어 쓴 괄호 덩어리 "  ( (a + b) % m == ... )" 를 떼어 해설로. 코드 호출 "add(...)" 는 건드리지 않음 */
+function splitTrailingParen(s: string): [string, string | null] {
+  const t = s.trimEnd()
+  if (!t.endsWith(')')) return [t, null]
+  let depth = 0
+  for (let i = t.length - 1; i >= 0; i--) {
+    if (t[i] === ')') depth++
+    else if (t[i] === '(' && --depth === 0) {
+      const head = t.slice(0, i)
+      if (!/\s$/.test(head) || head.replace(/\s/g, '').length < 4) return [t, null]
+      return [head.trim(), t.slice(i).trim()]
+    }
+  }
+  return [t, null]
+}
+
+/** 메모 "실수 -> 결과 => 고치는 법" 을 조각내기. 화살표 순서·종류가 섞여 있어도 결과와 고치는 법을 가른다 */
+export function splitMemo(m: Pick<ListItem, 'text' | 'detail' | 'problemTag'>) {
+  const tag = m.problemTag ? new RegExp(`\\s*\\(${m.problemTag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^)]*\\)`) : null
+  const untag = (x: string) => (tag ? x.replace(tag, '').trim() : x)
+  const [issue, ...rest] = splitOutside(m.text).map(untag)
+  for (const d of m.detail) if (/^\s*(->|=>)/.test(d)) rest.push(...splitOutside(d.trim().replace(/^(->|=>)\s*/, '')).map(untag))
+  const extra: string[] = []
+  const result = rest.filter((x) => RESULT.test(x))
+  const fixes = rest
+    .filter((x) => !RESULT.test(x))
+    .map((x) => {
+      const [head, paren] = splitTrailingParen(x)
+      if (paren) extra.push(paren)
+      return head
+    })
+  return { issue, result, fix: fixes.length ? fixes[fixes.length - 1] : null, extra }
+}
 
 export function buildQuizzes(d: NotesData): QuizItem[] {
   const out: QuizItem[] = []
@@ -111,35 +181,85 @@ export function buildQuizzes(d: NotesData): QuizItem[] {
       })
   }
 
-  // 5. 틀렸던 포인트 / 팁 -> 고치는 법
+  // 5. 틀렸던 포인트 / 팁 -> "실수 → 고치는 법", 고치는 법이 없으면 "실수 → 결과"
   const lists = [...(d.mistakes?.items ?? []), ...(d.tips?.items ?? [])]
-  const fixes = uniq(lists.map((m) => m.fix).filter((f): f is string => !!f))
-  for (const m of lists) {
-    if (!m.fix) continue
-    const issue = m.text.includes(' -> ' + m.fix) ? m.text.slice(0, m.text.lastIndexOf(' -> ')).trim() : m.text
-    out.push({
-      id: `mf:${m.id}`,
-      kind: 'mistake-fix',
-      prompt: '이 실수, 어떻게 고칠까?',
-      subject: issue,
-      answer: m.fix,
-      pool: fixes.filter((f) => f !== m.fix),
-      problemId: m.problemId,
-      note: m.detail.filter((x) => !x.trim().startsWith('->')).map((x) => x.trim()).join('\n') || undefined,
-      source: 'mistake',
-    })
+  const memos = lists.map((m, i) => ({ m, i, ...splitMemo(m) }))
+  const ownQuiz = new Map(d.customQuizzes.filter((q) => q.mistakeId).map((q) => [q.mistakeId!, q]))
+  for (const cur of memos) {
+    const { m } = cur
+    const memo = [m.text, ...m.detail.map((x) => x.trim())].join('\n')
+    const own = ownQuiz.get(m.id)
+    if (own) {
+      out.push({
+        id: `cq:${own.id}`,
+        kind: 'mistake-fix',
+        prompt: own.question,
+        answer: own.answer,
+        pool: own.wrong,
+        fixedOptions: true,
+        problemId: m.problemId,
+        note: [own.why, '원래 메모\n' + memo].filter(Boolean).join('\n\n'),
+        source: 'mistake',
+      })
+      continue
+    }
+    const near = (pick: (x: (typeof memos)[number]) => string | null) => {
+      const answer = pick(cur)!
+      return uniq(
+        memos
+          .filter((o) => o !== cur && pick(o) && pick(o) !== answer)
+          .map((o) => {
+            const len = pick(o)!.length / answer.length
+            // 같은 문제·가까운 줄(비슷한 주제)·비슷한 길이일수록 앞에
+            const score = Math.abs(o.i - cur.i) - (m.problemId && o.m.problemId === m.problemId ? 30 : 0) + (len > 2.5 || len < 0.4 ? 15 : 0)
+            return { v: pick(o)!, score }
+          })
+          .sort((a, b) => a.score - b.score)
+          .map((x) => x.v),
+      ).slice(0, 6)
+    }
+    // 해설: 질문·정답에 이미 나온 줄(화살표 줄)은 빼고, 메모의 나머지 설명과 떼어 낸 괄호 공식만
+    const explain = [...m.detail.filter((x) => !/^\s*(->|=>)/.test(x)).map((x) => x.trim()), ...cur.extra].filter(Boolean).join('\n') || undefined
+    if (cur.fix) {
+      out.push({
+        id: `mf:${m.id}`,
+        kind: 'mistake-fix',
+        prompt: '이 실수, 어떻게 고칠까?',
+        subject: cur.result.length ? `${cur.issue}\n→ ${cur.result.join(' → ')}` : cur.issue,
+        answer: cur.fix,
+        pool: near((x) => x.fix),
+        problemId: m.problemId,
+        note: explain,
+        source: 'mistake',
+      })
+    } else if (cur.result.length) {
+      out.push({
+        id: `mr:${m.id}`,
+        kind: 'mistake-result',
+        prompt: '이렇게 하면 어떻게 될까?',
+        subject: cur.issue,
+        answer: cur.result.join(' → '),
+        pool: near((x) => (x.result.length ? x.result.join(' → ') : null)),
+        problemId: m.problemId,
+        note: explain,
+        source: 'mistake',
+      })
+    }
   }
 
-  // 6. 직접 만든 @quiz
-  for (const q of d.customQuizzes) {
-    const others = d.customQuizzes.filter((o) => o !== q).flatMap((o) => [o.answer, ...o.wrong])
+  // 6. 직접 만든 @quiz (틀렸던 포인트 아래에 적은 건 위에서 처리)
+  const free = d.customQuizzes.filter((q) => !q.mistakeId)
+  for (const q of free) {
+    const others = free.filter((o) => o !== q).flatMap((o) => [o.answer, ...o.wrong])
     out.push({
       id: `cq:${q.id}`,
       kind: 'custom',
       prompt: q.question,
       answer: q.answer,
       pool: q.wrong.length >= 3 ? q.wrong : uniq([...q.wrong, ...others.filter((o) => o !== q.answer)]),
+      fixedOptions: true,
       problemId: q.problemId,
+      note: q.why ?? undefined,
       source: 'custom',
     })
   }
@@ -162,7 +282,7 @@ export interface QuizQuestion extends QuizItem {
 
 /** 직접 쓴 오답은 우선, 모자라면 후보에서 무작위로 채워 4지선다 */
 export function toQuestion(q: QuizItem): QuizQuestion {
-  const wrong = q.kind === 'custom' ? q.pool.slice(0, 3) : shuffle(q.pool).slice(0, 3)
+  const wrong = q.fixedOptions ? q.pool.slice(0, 3) : shuffle(q.pool).slice(0, 3)
   return { ...q, options: shuffle([q.answer, ...wrong]) }
 }
 

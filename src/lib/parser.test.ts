@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { parseNotes } from './parser'
-import { buildQuizzes } from './quiz'
+import { buildQuizzes, splitMemo } from './quiz'
 
 const sample = `// ============================================================
 //  자바 정리
@@ -108,5 +108,43 @@ describe('실제 정리 파일', () => {
   })
   it('퀴즈는 정답이 보기 후보에 섞이지 않는다', () => {
     for (const q of buildQuizzes(d)) expect(q.pool).not.toContain(q.answer)
+  })
+})
+
+describe('틀렸던 포인트 퀴즈', () => {
+  it('메모를 실수 / 결과 / 고치는 법으로 나눈다', () => {
+    expect(splitMemo({ text: '"최단거리"를 DFS 로 다 가보면 경로 수가 폭발 -> 효율성 시간 초과 => BFS', detail: [], problemTag: null })).toMatchObject({
+      issue: '"최단거리"를 DFS 로 다 가보면 경로 수가 폭발',
+      result: ['효율성 시간 초과'],
+      fix: 'BFS',
+    })
+    // 끝의 띄어 쓴 괄호(공식)는 해설로, 코드 속 람다 화살표는 자르지 않음
+    expect(splitMemo({ text: '마지막에만 % 하면 오버플로우', detail: ['    -> 계산할 때마다 %   ( (a + b) % m )'], problemTag: null })).toMatchObject({ fix: '계산할 때마다 %', extra: ['( (a + b) % m )'] })
+    expect(splitMemo({ text: 'Object 스트림 (프로세스)', detail: ['-> queue.stream().anyMatch(x -> x > cur)'], problemTag: '프로세스' })).toMatchObject({
+      issue: 'Object 스트림',
+      fix: 'queue.stream().anyMatch(x -> x > cur)',
+    })
+    // 고치는 법 없이 결과만 있으면 fix 없음 -> "실수 → 결과" 문제
+    expect(splitMemo({ text: '다시 훑기는 O(n^2) -> 시간 초과', detail: [], problemTag: null })).toMatchObject({ fix: null, result: ['시간 초과'] })
+  })
+
+  it('항목 아래 @quiz / @why 가 자동 문제를 대신한다', () => {
+    const d = parseNotes(`// ============================================================
+// 7. 틀렸던 포인트
+// ============================================================
+
+// - 마지막에만 % 하면 오버플로우
+//       -> 계산할 때마다 %
+//       @quiz: 나머지 문제, 어떻게? | 매번 % | 마지막에 % | double | abs
+//       @why: 중간에 나눠도 답이 같음
+// - 시작칸 방문 처리 -> visited[0][0] = true
+`)
+    expect(d.warnings.filter((w) => w.includes('@'))).toEqual([])
+    expect(d.mistakes!.items[0].detail).toEqual(['      -> 계산할 때마다 %'])
+    expect(d.customQuizzes[0]).toMatchObject({ mistakeId: d.mistakes!.items[0].id, why: '중간에 나눠도 답이 같음' })
+    const qs = buildQuizzes(d).filter((q) => q.source === 'mistake')
+    expect(qs.map((q) => q.prompt)).toEqual(['나머지 문제, 어떻게?', '이 실수, 어떻게 고칠까?'])
+    expect(qs[0].note).toContain('중간에 나눠도 답이 같음')
+    expect(d.customQuizzes.filter((q) => !q.mistakeId)).toHaveLength(0)
   })
 })
