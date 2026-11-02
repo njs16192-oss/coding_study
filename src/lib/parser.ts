@@ -27,7 +27,7 @@ const DASH_HEADER = /^\s*\/\/\s*-{3,}\s*(.+?)\s*-{3,}\s*$/
 const META = /^\s*\/\/\s*@([a-zA-Z]+)\s*:\s*(.*)$/
 const COMMENT = /^\s*\/\/(.*)$/
 const DATE = /^\d{4}-\d{2}-\d{2}$/
-const KNOWN_META = new Set(['tags', 'hint', 'review', 'solved', 'level', 'quiz'])
+const KNOWN_META = new Set(['tags', 'hint', 'review', 'solved', 'level', 'quiz', 'why'])
 
 interface RawSection {
   titleLines: string[]
@@ -137,11 +137,28 @@ function parseList(
   id: string,
   kind: 'tips' | 'mistakes',
   problemNames: Map<string, string>,
+  quizzes: Quiz[],
+  quizLines: Set<number>,
+  warnings: string[],
 ): ListSection {
   const items: ListItem[] = []
   let cur: ListItem | null = null
-  for (const { text } of sec.body) {
+  let lastQuiz: Quiz | null = null
+  for (const { text, line } of sec.body) {
     if (!text.trim()) continue
+    // 항목 아래에 적은 @quiz / @why 는 그 항목의 퀴즈 (자동 문제 대신 나감)
+    const meta = META.exec(text)
+    if (meta && cur && ['quiz', 'why'].includes(meta[1].toLowerCase())) {
+      quizLines.add(line)
+      if (meta[1].toLowerCase() === 'quiz') {
+        lastQuiz = parseQuiz(meta[2], `${cur.id}-quiz`, cur.problemId, warnings)
+        if (lastQuiz) {
+          lastQuiz.mistakeId = cur.id
+          quizzes.push(lastQuiz)
+        }
+      } else if (lastQuiz && lastQuiz.mistakeId === cur.id) lastQuiz.why = meta[2].trim()
+      continue
+    }
     const body = stripComment(text)
     const start = /^-\s+(.*)$/.exec(body)
     if (start) {
@@ -191,7 +208,7 @@ function parseQuiz(value: string, id: string, problemId: string | null, warnings
     return null
   }
   const [question, answer, ...wrong] = parts
-  return { id, question, answer, wrong, problemId }
+  return { id, question, answer, wrong, problemId, why: null, mistakeId: null }
 }
 
 function parseProblems(sec: RawSection, warnings: string[], quizzes: Quiz[], quizLines: Set<number>): Problem[] {
@@ -257,6 +274,11 @@ function parseProblems(sec: RawSection, warnings: string[], quizzes: Quiz[], qui
           } else if (key === 'quiz') {
             const q = parseQuiz(val, `${id}-quiz-${quizzes.length + 1}`, id, warnings)
             if (q) quizzes.push(q)
+            quizLines.add(lineNo)
+          } else if (key === 'why') {
+            const last = quizzes[quizzes.length - 1]
+            if (last && last.problemId === id) last.why = val
+            else warnings.push(`${title}: @why 는 @quiz 바로 아래에 적어 주세요`)
             quizLines.add(lineNo)
           }
           continue
@@ -324,11 +346,11 @@ export function parseNotes(source: string): NotesData {
     data.sectionOrder.push({ id, title, kind })
     if (kind === 'cheat') data.cheats.push(parseCheat(s, id))
     else if (kind === 'tips') {
-      const sec = parseList(s, id, 'tips', problemNames)
+      const sec = parseList(s, id, 'tips', problemNames, data.customQuizzes, quizLines, warnings)
       if (data.tips) data.tips.items.push(...sec.items)
       else data.tips = sec
     } else if (kind === 'mistakes') {
-      const sec = parseList(s, id, 'mistakes', problemNames)
+      const sec = parseList(s, id, 'mistakes', problemNames, data.customQuizzes, quizLines, warnings)
       if (data.mistakes) data.mistakes.items.push(...sec.items)
       else data.mistakes = sec
     } else if (kind === 'priority') data.priority = parsePriority(s, id)
@@ -339,7 +361,10 @@ export function parseNotes(source: string): NotesData {
     const m = META.exec(l)
     if (!m || m[1].toLowerCase() !== 'quiz' || quizLines.has(i + 1)) return
     const q = parseQuiz(m[2], `quiz-${i + 1}`, null, warnings)
-    if (q) data.customQuizzes.push(q)
+    if (!q) return
+    const why = META.exec(lines[i + 1] ?? '')
+    if (why && why[1].toLowerCase() === 'why') q.why = why[2].trim()
+    data.customQuizzes.push(q)
   })
 
   if (!data.problems.length) warnings.push('문제를 하나도 못 찾음: "// ---------- 문제명 -> 핵심 ----------" 헤더를 확인하세요')

@@ -148,6 +148,12 @@ const PATHS: Record<string, ReactNode> = {
       <path d="M3 10h18M8 3v4M16 3v4" />
     </>
   ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
   back: <path d="M15 5 8 12l7 7" />,
   check: <path d="m5 12 5 5 9-10" />,
   x: <path d="M6 6l12 12M18 6 6 18" />,

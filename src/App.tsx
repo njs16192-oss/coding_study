@@ -93,7 +93,7 @@ export default function App() {
       content = <ProblemsPage id={route.path[1] ?? null} query={route.query} />
       break
     case 'quiz':
-      content = <QuizPage query={route.query} />
+      content = <QuizPage sub={route.path[1] ?? null} query={route.query} />
       break
     case 'mistakes':
       content = <MistakesPage />

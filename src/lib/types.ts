@@ -79,6 +79,10 @@ export interface Quiz {
   answer: string
   wrong: string[]
   problemId: string | null
+  /** 바로 아래 // @why: 줄. 풀고 나서 해설로 보여 줌 */
+  why: string | null
+  /** 틀렸던 포인트 항목 아래에 적은 @quiz 면 그 항목 id (자동 문제를 대신함) */
+  mistakeId: string | null
 }
 
 export interface NotesData {
