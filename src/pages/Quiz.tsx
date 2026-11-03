@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { allTags, notes, problemById, quizzes } from '../data'
 import { HISTORY_LIMIT, useQuizHistory, useQuizRun, useQuizStats, useReviewLog, type QuizAnswerRecord } from '../lib/store'
 import { reviewState, today } from '../lib/review'
@@ -216,9 +216,9 @@ function QuizPlay({ query }: { query: URLSearchParams }) {
 
   const q = questions[idx]
   const answered = picked !== null
-  const choose = (opt: string) => {
+  const choose = (opt: string, recalled?: boolean) => {
     if (answered) return
-    const ok = opt === q.answer
+    const ok = recalled ?? opt === q.answer
     setRun((r) => (r ? { ...r, picked: opt, picks: [...r.picks, opt], results: [...r.results, ok] } : r))
     setStats((prev) => {
       const s = prev[q.id] ?? { right: 0, wrong: 0, last: '' }
@@ -247,6 +247,8 @@ function QuizPlay({ query }: { query: URLSearchParams }) {
       return [next, ...prev.filter((h) => h.id !== run.id)].slice(0, HISTORY_LIMIT)
     })
   }
+  const ctxProblem = q.problemId && q.source !== 'problem' ? problemById.get(q.problemId) : undefined
+  const ctx = ctxProblem ? { title: ctxProblem.title, core: ctxProblem.core } : null
   const next = () => setRun((r) => (r ? { ...r, picked: null, idx: r.idx + 1 } : r))
 
   return (
@@ -265,12 +267,22 @@ function QuizPlay({ query }: { query: URLSearchParams }) {
 
       <Card className="space-y-3 p-5">
         <p className="text-xs font-medium text-indigo-600 dark:text-indigo-300">{KIND_LABEL[q.kind]}</p>
+        {ctx && (
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-sm dark:border-indigo-500/30 dark:bg-indigo-500/10">
+            <p className="font-semibold text-indigo-700 dark:text-indigo-200">{ctx.title}</p>
+            <p className="text-slate-600 dark:text-slate-300">{ctx.core}</p>
+          </div>
+        )}
         <p className="text-lg font-semibold">{q.prompt}</p>
         {q.subject && (
           <div className={cx('rounded-lg bg-slate-100 px-3 py-2.5 dark:bg-slate-800', q.subjectIsCode ? 'font-mono text-sm break-all' : 'text-[15px] leading-7 whitespace-pre-line')}>{q.subject}</div>
         )}
+        {q.terms && <TermsHint key={run.id + ':' + idx} terms={q.terms} />}
       </Card>
 
+      {q.recall ? (
+        <RecallBox key={run.id + ':' + idx} answer={q.answer} answered={answered} picked={picked} onPick={(ok) => choose(ok ? RECALL_YES : RECALL_NO, ok)} />
+      ) : (
       <div className="space-y-2">
         {q.options.map((opt, i) => {
           const isAnswer = opt === q.answer
@@ -295,6 +307,7 @@ function QuizPlay({ query }: { query: URLSearchParams }) {
           )
         })}
       </div>
+      )}
 
       {answered && (
         <div className="space-y-3">
@@ -315,6 +328,61 @@ function QuizPlay({ query }: { query: URLSearchParams }) {
           )}
           <button onClick={next} className="w-full rounded-xl bg-slate-900 py-3.5 font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
             {idx + 1 < questions.length ? '다음' : '결과 보기'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const RECALL_YES = '기억났어요'
+const RECALL_NO = '몰랐어요'
+
+/** 풀기 전에 눌러서 펼치는 용어 힌트 (그 문제 정리에 적어 둔 용어 설명) */
+function TermsHint({ terms }: { terms: string[] }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="text-sm">
+      <button onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1 font-medium text-indigo-600 dark:text-indigo-300">
+        {open ? '용어 힌트 접기' : '용어 힌트 보기'}
+      </button>
+      {open && (
+        <ul className="mt-2 space-y-1 rounded-lg bg-amber-50 px-3 py-2 text-slate-700 dark:bg-amber-500/10 dark:text-slate-200">
+          {terms.map((t, i) => (
+            <li key={i} className="break-words">
+              {t}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** 그럴듯한 오답이 모자란 문제: 떠올려 본 뒤 정답을 보고 스스로 채점 */
+function RecallBox({ answer, answered, picked, onPick }: { answer: string; answered: boolean; picked: string | null; onPick: (ok: boolean) => void }) {
+  const [shown, setShown] = useState(answered)
+  if (!shown)
+    return (
+      <div className="space-y-2">
+        <p className="text-center text-sm text-slate-500">보기 없이 먼저 떠올려 보세요</p>
+        <button onClick={() => setShown(true)} className="w-full rounded-xl border border-indigo-300 bg-white py-3.5 font-semibold text-indigo-700 dark:border-indigo-500/40 dark:bg-slate-900 dark:text-indigo-200">
+          정답 보기
+        </button>
+      </div>
+    )
+  return (
+    <div className="space-y-2">
+      <div className="rounded-xl border border-emerald-500 bg-emerald-50 px-4 py-3 text-[15px] leading-6 break-words dark:bg-emerald-500/10">{answer}</div>
+      {answered ? (
+        <p className="text-center text-sm text-slate-500">{picked === RECALL_YES ? '기억난 걸로 기록했어요' : '다음에 더 자주 나와요'}</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => onPick(false)} className="rounded-xl border border-red-300 py-3 font-semibold text-red-600 dark:border-red-500/40 dark:text-red-300">
+            {RECALL_NO}
+          </button>
+          <button onClick={() => onPick(true)} className="rounded-xl bg-emerald-600 py-3 font-semibold text-white">
+            {RECALL_YES}
           </button>
         </div>
       )}
