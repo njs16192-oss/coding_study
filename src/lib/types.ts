@@ -56,6 +56,14 @@ export interface ExplainLine {
   mine: boolean
 }
 
+export interface Term {
+  /** 용어 이름 (퀴즈 카드에 이 말이 나오면 힌트로 보여 줌) */
+  term: string
+  /** 보여 줄 한 줄 */
+  text: string
+  manual: boolean
+}
+
 export interface Problem {
   id: string
   title: string
@@ -67,6 +75,8 @@ export interface Problem {
   solved: string | null
   level: string | null
   explain: ExplainLine[]
+  /** 용어 설명. @terms: 로 직접 쓴 것(manual) + 설명 줄 "hit (이미 있음) : ..." 에서 자동으로 찾은 것 */
+  terms: Term[]
   code: string
   codeHtml?: string
   /** 원본 파일에서 헤더가 있던 줄 번호 (1부터) */

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { parseNotes } from './parser'
-import { buildQuizzes, splitMemo } from './quiz'
+import { buildQuizzes, splitMemo, toQuestion } from './quiz'
 
 const sample = `// ============================================================
 //  자바 정리
@@ -146,5 +146,50 @@ describe('틀렸던 포인트 퀴즈', () => {
     expect(qs.map((q) => q.prompt)).toEqual(['나머지 문제, 어떻게?', '이 실수, 어떻게 고칠까?'])
     expect(qs[0].note).toContain('중간에 나눠도 답이 같음')
     expect(d.customQuizzes.filter((q) => !q.mistakeId)).toHaveLength(0)
+  })
+
+  it('문제 맥락: 용어 힌트, 같은 문제/유형 오답, 모자라면 떠올리기 카드', () => {
+    const d = parseNotes(`// ============================================================
+// 7. 틀렸던 포인트
+// ============================================================
+
+// - hit/miss 와 크기 조건을 섞어 분기 -> 빠지는 경우가 생김 (캐시)
+//       -> contains 로 hit/miss 를 먼저 나누기
+// - 크기 0 을 처리 안 함 (캐시)
+//       -> 맨 앞에서 return 하기
+// - 격자를 대각선까지 돎 (게임 맵)
+//       -> 4방향 배열 쓰기
+// - 도착점을 맵 밖으로 씀 (게임 맵)
+//       -> n-1, m-1 쓰기
+
+// ============================================================
+// 8. 문제 유형별 패턴
+// ============================================================
+
+// ---------- [1차] 캐시 -> LRU ----------
+// @tags: 시뮬레이션
+// @terms: LRU = 가장 오래 안 쓴 것부터 버리기
+// hit (이미 있음)  : +1, 맨 뒤로
+// miss (없음)      : +5, 꽉 찼으면 맨 앞 버리기
+// cacheSize == 0 이면 전부 miss
+
+// ---------- 게임 맵 -> BFS ----------
+// @tags: BFS
+// BFS : 가까운 칸부터
+`)
+    expect(d.warnings).toEqual([])
+    const cache = d.problems[0]
+    expect(cache.terms.map((t) => [t.term, t.manual])).toEqual([
+      ['LRU', true],
+      ['hit', false],
+      ['miss', false],
+    ])
+    const q = buildQuizzes(d).find((x) => x.subject?.startsWith('hit/miss'))!
+    // 직접 쓴 @terms 는 항상, 자동 용어는 카드에 그 말이 나올 때만
+    expect(q.terms).toEqual(['LRU : 가장 오래 안 쓴 것부터 버리기', 'hit (이미 있음) : +1, 맨 뒤로', 'miss (없음) : +5, 꽉 찼으면 맨 앞 버리기'])
+    // 다른 유형(게임 맵) 메모는 오답으로 안 섞이고, 모자라니 떠올리기 카드
+    expect(q.pool).toEqual(['맨 앞에서 return 하기'])
+    expect(q.recall).toBe(true)
+    expect(toQuestion(q).options).toEqual([])
   })
 })

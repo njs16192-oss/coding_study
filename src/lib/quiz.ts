@@ -1,5 +1,5 @@
 // 정리 파일 내용으로 객관식 퀴즈 만들기. 파일이 바뀌면 문제도 같이 바뀐다.
-import type { ListItem, NotesData } from './types'
+import type { ListItem, NotesData, Problem } from './types'
 import { TAG_ORDER } from './tags'
 import type { QuizStats } from './store'
 
@@ -21,6 +21,10 @@ export interface QuizItem {
   problemId: string | null
   /** 풀고 나서 보여 줄 설명 */
   note?: string
+  /** 같은 문제·유형에서 그럴듯한 오답이 3개가 안 되면: 보기 없이 떠올려 보고 정답 확인 */
+  recall?: boolean
+  /** 풀기 전에 펼쳐 볼 수 있는 용어 힌트 (그 문제 정리에서) */
+  terms?: string[]
   source: 'cheat' | 'problem' | 'mistake' | 'custom'
 }
 
@@ -184,6 +188,7 @@ export function buildQuizzes(d: NotesData): QuizItem[] {
   // 5. 틀렸던 포인트 / 팁 -> "실수 → 고치는 법", 고치는 법이 없으면 "실수 → 결과"
   const lists = [...(d.mistakes?.items ?? []), ...(d.tips?.items ?? [])]
   const memos = lists.map((m, i) => ({ m, i, ...splitMemo(m) }))
+  const byId = new Map(d.problems.map((p) => [p.id, p]))
   const ownQuiz = new Map(d.customQuizzes.filter((q) => q.mistakeId).map((q) => [q.mistakeId!, q]))
   for (const cur of memos) {
     const { m } = cur
@@ -205,13 +210,21 @@ export function buildQuizzes(d: NotesData): QuizItem[] {
     }
     const near = (pick: (x: (typeof memos)[number]) => string | null) => {
       const answer = pick(cur)!
+      const mine = m.problemId ? byId.get(m.problemId) : undefined
+      // 문제에 연결된 메모: 같은 문제 -> 같은 유형 문제의 메모만 오답으로 (엉뚱한 문제 보기는 바로 티가 남)
+      const related = (o: (typeof memos)[number]) => {
+        if (!mine) return true
+        if (o.m.problemId === mine.id) return true
+        const other = o.m.problemId ? byId.get(o.m.problemId) : undefined
+        return !!other && other.tags.some((t) => mine.tags.includes(t))
+      }
       return uniq(
         memos
-          .filter((o) => o !== cur && pick(o) && pick(o) !== answer)
+          .filter((o) => o !== cur && pick(o) && pick(o) !== answer && related(o))
           .map((o) => {
             const len = pick(o)!.length / answer.length
             // 같은 문제·가까운 줄(비슷한 주제)·비슷한 길이일수록 앞에
-            const score = Math.abs(o.i - cur.i) - (m.problemId && o.m.problemId === m.problemId ? 30 : 0) + (len > 2.5 || len < 0.4 ? 15 : 0)
+            const score = Math.abs(o.i - cur.i) - (m.problemId && o.m.problemId === m.problemId ? 1000 : 0) + (len > 2.5 || len < 0.4 ? 15 : 0)
             return { v: pick(o)!, score }
           })
           .sort((a, b) => a.score - b.score)
@@ -221,25 +234,29 @@ export function buildQuizzes(d: NotesData): QuizItem[] {
     // 해설: 질문·정답에 이미 나온 줄(화살표 줄)은 빼고, 메모의 나머지 설명과 떼어 낸 괄호 공식만
     const explain = [...m.detail.filter((x) => !/^\s*(->|=>)/.test(x)).map((x) => x.trim()), ...cur.extra].filter(Boolean).join('\n') || undefined
     if (cur.fix) {
+      const fixPool = near((x) => x.fix)
       out.push({
         id: `mf:${m.id}`,
         kind: 'mistake-fix',
         prompt: '이 실수, 어떻게 고칠까?',
         subject: cur.result.length ? `${cur.issue}\n→ ${cur.result.join(' → ')}` : cur.issue,
         answer: cur.fix,
-        pool: near((x) => x.fix),
+        pool: fixPool,
+        recall: fixPool.length < 3 && !!m.problemId,
         problemId: m.problemId,
         note: explain,
         source: 'mistake',
       })
     } else if (cur.result.length) {
+      const resultPool = near((x) => (x.result.length ? x.result.join(' → ') : null))
       out.push({
         id: `mr:${m.id}`,
         kind: 'mistake-result',
         prompt: '이렇게 하면 어떻게 될까?',
         subject: cur.issue,
         answer: cur.result.join(' → '),
-        pool: near((x) => (x.result.length ? x.result.join(' → ') : null)),
+        pool: resultPool,
+        recall: resultPool.length < 3 && !!m.problemId,
         problemId: m.problemId,
         note: explain,
         source: 'mistake',
@@ -264,7 +281,26 @@ export function buildQuizzes(d: NotesData): QuizItem[] {
     })
   }
 
-  return out.filter((q) => q.pool.length >= 1)
+  for (const q of out) {
+    const p = q.problemId ? byId.get(q.problemId) : undefined
+    // 문제 풀이 퀴즈(문제 → 핵심)는 용어 설명이 곧 정답 힌트라서 빼기
+    if (p && q.source !== 'problem') q.terms = termsFor(q, p)
+  }
+  return out.filter((q) => q.pool.length >= 1 || q.recall)
+}
+
+/** 직접 쓴 @terms 는 항상, 자동으로 찾은 용어는 카드(질문·보기)에 그 말이 나올 때만 */
+function termsFor(q: QuizItem, p: Problem): string[] | undefined {
+  const text = [q.prompt, q.subject ?? '', q.answer].join('\n').toLowerCase()
+  const words = (x: string) => x.toLowerCase().split(/[\s,.()"'·]+/).filter((w) => w.length >= 2)
+  const ans = words(q.answer)
+  // 용어 설명이 정답을 거의 그대로 담고 있으면 힌트가 아니라 정답 공개라서 뺀다
+  const givesAway = (t: string) => {
+    const tw = new Set(words(t))
+    return ans.length > 0 && ans.filter((w) => tw.has(w)).length / ans.length >= 0.5
+  }
+  const picked = p.terms.filter((t) => t.manual || (text.includes(t.term.toLowerCase()) && !givesAway(t.text)))
+  return picked.length ? picked.map((t) => t.text) : undefined
 }
 
 function shuffle<T>(xs: T[]): T[] {
@@ -282,6 +318,7 @@ export interface QuizQuestion extends QuizItem {
 
 /** 직접 쓴 오답은 우선, 모자라면 후보에서 무작위로 채워 4지선다 */
 export function toQuestion(q: QuizItem): QuizQuestion {
+  if (q.recall) return { ...q, options: [] }
   const wrong = q.fixedOptions ? q.pool.slice(0, 3) : shuffle(q.pool).slice(0, 3)
   return { ...q, options: shuffle([q.answer, ...wrong]) }
 }

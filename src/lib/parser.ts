@@ -19,6 +19,7 @@ import type {
   PrioritySection,
   Problem,
   Quiz,
+  Term,
 } from './types'
 import { inferTags } from './tags'
 
@@ -27,7 +28,7 @@ const DASH_HEADER = /^\s*\/\/\s*-{3,}\s*(.+?)\s*-{3,}\s*$/
 const META = /^\s*\/\/\s*@([a-zA-Z]+)\s*:\s*(.*)$/
 const COMMENT = /^\s*\/\/(.*)$/
 const DATE = /^\d{4}-\d{2}-\d{2}$/
-const KNOWN_META = new Set(['tags', 'hint', 'review', 'solved', 'level', 'quiz', 'why'])
+const KNOWN_META = new Set(['tags', 'hint', 'review', 'solved', 'level', 'quiz', 'why', 'terms'])
 
 interface RawSection {
   titleLines: string[]
@@ -243,6 +244,7 @@ function parseProblems(sec: RawSection, warnings: string[], quizzes: Quiz[], qui
       solved: null,
       level: null,
       explain: [],
+      terms: [],
       code: '',
       line: b.line,
     }
@@ -269,6 +271,12 @@ function parseProblems(sec: RawSection, warnings: string[], quizzes: Quiz[], qui
           } else if (key === 'solved') {
             if (DATE.test(val)) p.solved = val
             else warnings.push(`${title}: @solved 날짜 형식은 YYYY-MM-DD (${val})`)
+          } else if (key === 'terms') {
+            for (const part of val.split('|')) {
+              const m = /^(.+?)\s*(?<![=!<>])[:=](?!=)\s*(.+)$/.exec(part.trim())
+              if (m) p.terms.push({ term: m[1].trim(), text: `${m[1].trim()} : ${m[2].trim()}`, manual: true })
+              else if (part.trim()) warnings.push(`${title}: @terms 는 "용어 = 뜻 | 용어 = 뜻" 형식 (${part.trim()})`)
+            }
           } else if (key === 'level') {
             p.level = val
           } else if (key === 'quiz') {
@@ -300,9 +308,27 @@ function parseProblems(sec: RawSection, warnings: string[], quizzes: Quiz[], qui
     while (codeLines.length && !codeLines[codeLines.length - 1].trim()) codeLines.pop()
     p.code = codeLines.join('\n')
     if (p.tagsAuto) p.tags = inferTags(p)
+    p.terms.push(...autoTerms(p))
     problems.push(p)
   }
   return problems
+}
+
+/** 설명 줄 "hit (이미 있음) : +1, ..." / "캐시 = 순서가 있는 리스트" 처럼 짧은 이름 뒤에 : 나 = 가 오는 줄을 용어 설명으로 */
+const TERM_LINE = /^([A-Za-z가-힣][A-Za-z0-9가-힣_ ]{0,15}?)\s*(\([^()]*\))?\s*(?<![=!<>])[:=](?!=)\s*\S/
+function autoTerms(p: Problem): Term[] {
+  const have = new Set(p.terms.map((t) => t.term.toLowerCase()))
+  const out: Term[] = []
+  for (const l of p.explain) {
+    if (l.mine || l.indent > 2) continue
+    const m = TERM_LINE.exec(l.text)
+    if (!m) continue
+    const term = m[1].trim()
+    if (term.length < 2 || have.has(term.toLowerCase())) continue
+    have.add(term.toLowerCase())
+    out.push({ term, text: l.text.replace(/\s{2,}/g, ' '), manual: false })
+  }
+  return out
 }
 
 export function parseNotes(source: string): NotesData {
